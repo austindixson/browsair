@@ -1,0 +1,13 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+xcuserdata/
+
+# Obscura engine binaries (fetched by scripts/fetch-engine.sh)
+Vendor/obscura/obscura
+Vendor/obscura/obscura-worker
+Vendor/obscura/*.tar.gz
+Sources/Browsair/Resources/Engine/obscura
+Sources/Browsair/Resources/Engine/obscura-worker
