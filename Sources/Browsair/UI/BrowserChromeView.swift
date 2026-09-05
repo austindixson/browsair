@@ -9,7 +9,13 @@ struct BrowserChromeView: View {
             tabStrip
             toolbar
             Divider()
-            content
+            HStack(spacing: 0) {
+                content
+                if session.isAISidebarVisible {
+                    Divider()
+                    AISidebarView(session: session)
+                }
+            }
         }
         .background(.background)
         .onAppear {
@@ -98,6 +104,14 @@ struct BrowserChromeView: View {
             }
 
             Spacer(minLength: 0)
+
+            Button {
+                session.isAISidebarVisible.toggle()
+            } label: {
+                Image(systemName: "sparkles")
+            }
+            .buttonStyle(.borderless)
+            .help("Toggle AI sidebar")
 
             Text(session.engineStatus)
                 .font(.caption2.monospaced())

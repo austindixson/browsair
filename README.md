@@ -1,31 +1,37 @@
 # Browsair
 
-A Mac-native browser powered by [Obscura](https://github.com/h4ckf0r0day/obscura) — not WebKit, not Safari.
+A Mac-native browser with SwiftUI chrome and a live WebKit page surface.
 
-SwiftUI chrome (tabs, URL bar, navigation) talks to a bundled Obscura engine over the Chrome DevTools Protocol. Pages are painted by Obscura’s own Rust renderer and streamed into the window as screenshots.
+Obscura remains in-tree as an optional headless automation backend over the Chrome DevTools Protocol. It is not launched for interactive browsing and is not polled for screenshots.
 
 ## Requirements
 
 - macOS 14+
 - Apple Silicon or Intel Mac
 - Xcode / Swift 5.9+
-- Network access to download the Obscura engine once
 
 ## Quick start
 
 ```bash
-./scripts/fetch-engine.sh   # downloads Obscura v0.2.1 (~90MB)
+swift test
 swift run Browsair
+```
+
+Headless Obscura is optional:
+
+```bash
+./scripts/fetch-engine.sh   # downloads Obscura v0.2.1 (~90MB)
 ```
 
 ## What it does
 
-- Launches `obscura serve` on a private localhost port
-- Opens tabs as Obscura targets
-- Navigates with `Page.navigate`
-- Shows live frames via `Page.captureScreenshot`
-- Forwards clicks, scroll, and keys through the CDP Input domain
-- Persists cookies/localStorage under `~/Library/Application Support/Browsair`
+- Renders pages in a native, interactive WebKit view
+- Blocks common advertising and analytics trackers by default
+- Keeps an agent-friendly, local control contract without exposing a remote server
+- Supports bounded structured DOM inspection for agents (selector, depth, and node limits)
+- Optional AI sidebar with xAI/OpenAI-compatible provider support and Keychain-backed credentials
+- Honest provider auth detection: no cookie scraping; official OAuth only when a provider documents and permits it
+- Persists website data under `~/Library/Application Support/Browsair`
 
 ## Shortcuts
 
@@ -41,9 +47,12 @@ swift run Browsair
 
 ```
 Sources/Browsair/
-  Engine/     Obscura process + CDP client
-  Browser/    Tabs + session
-  UI/         SwiftUI chrome + page surface
+  Browser/    Tabs + session (no Obscura/CDP)
+  UI/         SwiftUI chrome + WKWebView surface
+  Privacy/    Tracker blocking policy
+  Agent/      In-process command contract
+  AI/         Sidebar, Keychain, OAuth
+  Engine/     Optional headless Obscura + CDP (not started by the UI)
 Vendor/obscura/   Downloaded engine binary (gitignored)
 ```
 
@@ -53,6 +62,6 @@ Obscura is Apache-2.0. See [ATTRIBUTIONS.md](ATTRIBUTIONS.md).
 
 Browsair is an independent project and is not affiliated with the Obscura authors.
 
-## Limits (v1)
+## Limits (v0.2)
 
-Obscura is an independent browser engine. Rendering fidelity is not Chrome/Safari-identical. The UI is screenshot-driven, so it will feel less snappy than a compositor-backed browser. Extensions, passwords, and downloads are not built yet.
+The visible UI uses WebKit. Obscura is retained for future headless workflows and is not a drop-in replacement for WebKit’s compositor. Extensions, passwords, downloads, and remote CDP parity are not built yet.

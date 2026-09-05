@@ -21,7 +21,7 @@ struct NewTabView: View {
                     .symbolRenderingMode(.hierarchical)
                 Text("Browsair")
                     .font(.system(size: 36, weight: .semibold, design: .rounded))
-                Text("Mac-native browser · powered by Obscura")
+                Text("Mac-native browser")
                     .foregroundStyle(.secondary)
             }
 

@@ -27,6 +27,10 @@ struct BrowsairApp: App {
                 .keyboardShortcut("w", modifiers: .command)
             }
 
+            CommandMenu("AI") {
+                Button("AI Settings…") { NSApp.sendAction(#selector(AppDelegate.showAISettings), to: nil, from: nil) }
+            }
+
             CommandMenu("Navigation") {
                 Button("Reload") {
                     Task { await session.reload() }
@@ -58,6 +62,37 @@ extension Notification.Name {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var aiSettingsWindow: NSWindow?
+
+    @objc func showAISettings() {
+        if let window = aiSettingsWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 430),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "AI Settings"
+        window.contentViewController = NSHostingController(rootView: AISettingsView())
+        window.minSize = NSSize(width: 520, height: 430)
+        window.setContentSize(NSSize(width: 520, height: 430))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        aiSettingsWindow = window
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        aiSettingsWindow?.close()
+        aiSettingsWindow = nil
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)

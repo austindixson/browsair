@@ -1,139 +1,140 @@
 import AppKit
 import SwiftUI
+import WebKit
 
 struct PageSurfaceView: View {
     @ObservedObject var tab: TabModel
     @ObservedObject var session: BrowserSession
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                Color(nsColor: .windowBackgroundColor)
-
-                if tab.isStartPage {
-                    NewTabView(session: session, tab: tab)
-                } else if let image = tab.frameImage {
-                    Image(nsImage: image)
-                        .resizable()
-                        .interpolation(.high)
-                        .scaledToFit()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if tab.isLoading {
-                    ProgressView("Loading…")
-                } else {
-                    Text("No frame yet")
-                        .foregroundStyle(.secondary)
-                }
-
-                if let error = tab.errorMessage {
-                    VStack {
-                        Spacer()
-                        Text(error)
-                            .padding(8)
-                            .background(.red.opacity(0.85))
-                            .foregroundStyle(.white)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .padding()
-                    }
-                }
+        Group {
+            if tab.isStartPage {
+                NewTabView(session: session, tab: tab)
+            } else {
+                WebPageView(tab: tab, session: session)
             }
-            .contentShape(Rectangle())
-            .gesture(
-                SpatialTapGesture().onEnded { value in
-                    let point = mapPoint(value.location, in: geo.size, image: tab.frameImage)
-                    session.handleClick(at: point)
-                }
-            )
-            .onAppear {
-                session.updateViewport(
-                    width: geo.size.width,
-                    height: geo.size.height,
-                    scale: NSScreen.main?.backingScaleFactor ?? 2
-                )
-            }
-            .onChange(of: geo.size) { _, newSize in
-                session.updateViewport(
-                    width: newSize.width,
-                    height: newSize.height,
-                    scale: NSScreen.main?.backingScaleFactor ?? 2
-                )
-            }
-            .background(ScrollWheelCatcher { delta, location in
-                let point = mapPoint(location, in: geo.size, image: tab.frameImage)
-                session.handleScroll(deltaY: delta, at: point)
-            })
         }
-        .focusable()
-        .onKeyPress { keyPress in
-            let chars = String(keyPress.characters)
-            let key = chars.isEmpty ? keyPress.key.character.description : chars
-            session.handleKey(
-                characters: chars,
-                key: key,
-                code: key,
-                modifiers: 0,
-                isDown: true
-            )
-            session.handleKey(
-                characters: chars,
-                key: key,
-                code: key,
-                modifiers: 0,
-                isDown: false
-            )
-            return .handled
+        .overlay(alignment: .bottom) {
+            if let error = tab.errorMessage {
+                Text(error)
+                    .padding(8)
+                    .background(.red.opacity(0.85))
+                    .foregroundStyle(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding()
+            }
         }
-    }
-
-    private func mapPoint(_ location: CGPoint, in viewSize: CGSize, image: NSImage?) -> CGPoint {
-        guard let image else { return location }
-        let imageSize = image.size
-        guard imageSize.width > 0, imageSize.height > 0 else { return location }
-
-        let scale = min(viewSize.width / imageSize.width, viewSize.height / imageSize.height)
-        let drawnW = imageSize.width * scale
-        let drawnH = imageSize.height * scale
-        let originX = (viewSize.width - drawnW) / 2
-        let originY = (viewSize.height - drawnH) / 2
-
-        let x = (location.x - originX) / scale
-        let y = (location.y - originY) / scale
-        return CGPoint(
-            x: min(max(x, 0), imageSize.width),
-            y: min(max(y, 0), imageSize.height)
-        )
     }
 }
 
-/// Captures scroll wheel events that SwiftUI gestures often miss.
-private struct ScrollWheelCatcher: NSViewRepresentable {
-    var onScroll: (CGFloat, CGPoint) -> Void
+private struct WebPageView: NSViewRepresentable {
+    @ObservedObject var tab: TabModel
+    @ObservedObject var session: BrowserSession
 
-    func makeNSView(context: Context) -> ScrollCatcherView {
-        let view = ScrollCatcherView()
-        view.onScroll = onScroll
-        return view
+    func makeCoordinator() -> Coordinator { Coordinator(tab: tab, session: session) }
+
+    func makeNSView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        configuration.preferences.isElementFullscreenEnabled = true
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = context.coordinator
+        webView.allowsBackForwardNavigationGestures = true
+        context.coordinator.webView = webView
+        context.coordinator.agentBridge.webView = webView
+        context.coordinator.installPrivacyRules(on: webView)
+        context.coordinator.consumeInitialLoad()
+        return webView
     }
 
-    func updateNSView(_ nsView: ScrollCatcherView, context: Context) {
-        nsView.onScroll = onScroll
-    }
-}
-
-final class ScrollCatcherView: NSView {
-    var onScroll: ((CGFloat, CGPoint) -> Void)?
-
-    override var acceptsFirstResponder: Bool { true }
-
-    override func scrollWheel(with event: NSEvent) {
-        let location = convert(event.locationInWindow, from: nil)
-        // SwiftUI Y grows down; AppKit Y grows up — convert.
-        let flipped = CGPoint(x: location.x, y: bounds.height - location.y)
-        onScroll?(event.scrollingDeltaY, flipped)
+    func updateNSView(_ webView: WKWebView, context: Context) {
+        context.coordinator.tab = tab
+        context.coordinator.session = session
+        context.coordinator.webView = webView
+        context.coordinator.agentBridge.webView = webView
+        context.coordinator.applyPageCommand()
     }
 
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        // Transparent to clicks; PageSurfaceView gesture handles those.
-        nil
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        var tab: TabModel
+        var session: BrowserSession
+        weak var webView: WKWebView?
+        let agentBridge = AgentBridge()
+        private var lastLoadedURL = ""
+
+        init(tab: TabModel, session: BrowserSession) {
+            self.tab = tab
+            self.session = session
+        }
+
+        func installPrivacyRules(on webView: WKWebView) {
+            let rules = PrivacyPolicy.shared.contentBlockerJSON
+            WKContentRuleListStore.default().compileContentRuleList(
+                forIdentifier: "browsair.privacy",
+                encodedContentRuleList: rules
+            ) { list, _ in
+                guard let list else { return }
+                webView.configuration.userContentController.add(list)
+            }
+        }
+
+        func consumeInitialLoad() {
+            if case .load(let url) = tab.pageCommand, url == tab.urlString {
+                tab.pageCommand = nil
+            }
+            loadCurrentURL()
+        }
+
+        func applyPageCommand() {
+            guard let command = tab.pageCommand else { return }
+            tab.pageCommand = nil
+            switch command {
+            case .load(let urlString):
+                lastLoadedURL = urlString
+                if let url = URL(string: urlString) {
+                    webView?.load(URLRequest(url: url))
+                }
+            case .reload:
+                webView?.reload()
+            case .back:
+                webView?.goBack()
+            case .forward:
+                webView?.goForward()
+            case .stop:
+                webView?.stopLoading()
+            }
+        }
+
+        func loadCurrentURL() {
+            guard !tab.isStartPage,
+                  let url = URL(string: tab.urlString),
+                  url.scheme == "http" || url.scheme == "https",
+                  tab.urlString != lastLoadedURL else { return }
+            lastLoadedURL = tab.urlString
+            webView?.load(URLRequest(url: url))
+        }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            tab.isLoading = true
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            tab.isLoading = false
+            tab.urlString = webView.url?.absoluteString ?? tab.urlString
+            tab.addressText = tab.urlString
+            tab.title = webView.title?.isEmpty == false ? webView.title! : tab.urlString
+            tab.canGoBack = webView.canGoBack
+            tab.canGoForward = webView.canGoForward
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            tab.isLoading = false
+            tab.errorMessage = error.localizedDescription
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            tab.isLoading = false
+            tab.errorMessage = error.localizedDescription
+        }
     }
 }

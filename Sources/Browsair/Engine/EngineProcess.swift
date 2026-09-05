@@ -20,7 +20,8 @@ enum EngineError: LocalizedError {
     }
 }
 
-/// Owns the child `obscura serve` process.
+/// Owns an optional headless `obscura serve` process.
+/// Interactive browsing does not start this; `BrowserSession` is WebKit-only.
 final class EngineProcess: @unchecked Sendable {
     private(set) var port: Int = 0
     private var process: Process?
@@ -82,6 +83,7 @@ final class EngineProcess: @unchecked Sendable {
             "--port", "\(freePort)",
             "--storage-dir", storage.path,
             "--quiet",
+            "--stealth",
         ]
         proc.standardOutput = FileHandle.nullDevice
         proc.standardError = FileHandle.nullDevice

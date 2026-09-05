@@ -26,6 +26,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
+                .linkedFramework("WebKit"),
                 .unsafeFlags([
                     "-Xlinker", "-sectcreate",
                     "-Xlinker", "__TEXT",
@@ -33,6 +34,11 @@ let package = Package(
                     "-Xlinker", infoPlistPath,
                 ]),
             ]
+        ),
+        .testTarget(
+            name: "BrowsairTests",
+            dependencies: ["Browsair"],
+            path: "Tests/BrowsairTests"
         ),
     ]
 )
