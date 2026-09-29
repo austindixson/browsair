@@ -123,7 +123,17 @@ private struct WebPageView: NSViewRepresentable {
         }
 
         func applyPageCommand() {
-            // Consume so the command can only ever be applied once, even if updateNSView re-enters.
+            guard tab.pageCommand != nil else { return }
+            // Defer consumption + dispatch to the next main-queue turn. Reading AND writing the
+            // `@Published tab.pageCommand` synchronously inside updateNSView invalidates the view
+            // graph from within its own update, which re-enters updateNSView and spins forever
+            // (the address-bar Enter hang). Deferring lets the current update settle first.
+            Task { @MainActor [weak self] in self?.drainPageCommand() }
+        }
+
+        /// Applies and clears any pending page command once, outside of the SwiftUI update cycle.
+        /// Re-checks `pageCommand` first, so re-entrancy (or a command already cleared) is a no-op.
+        private func drainPageCommand() {
             guard let command = session.consumePageCommand(for: tab) else { return }
             switch command {
             case .load(let urlString):
