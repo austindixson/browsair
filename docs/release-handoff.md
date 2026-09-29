@@ -4,7 +4,8 @@ Repo: **https://github.com/austindixson/browsair** (private) · origin set · `m
 Tag **`v0.3.0`** is intentionally **not** created/pushed yet — it triggers the
 notarized Release the instant it lands, and that needs the signing secrets below.
 
-The CI workflow is wired and green-pending on `main`. The signing identity
+The CI workflow is wired on `main` (build/test + ad-hoc package; Developer-ID
+package job skips cleanly until the cert secrets exist). The signing identity
 secret `BROWSAIR_SIGN_IDENTITY` is already set. The other five secrets must come
 from you (they are your credentials / Apple secrets and cannot be produced by an
 agent that has no access to your login password or App Store Connect).

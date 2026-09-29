@@ -73,7 +73,7 @@ jobs:
           # GUI prompt (the partition list is the non-interactive enabler).
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN"
           security import "$RUNNER_TEMP/signing.p12" \
-            -k "$CERT_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+            -P "$CERT_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" "$(security default-keychain -d user -l | tr -d '"')"
           rm -f "$RUNNER_TEMP/signing.p12"
           echo "--- available signing identities ---"
