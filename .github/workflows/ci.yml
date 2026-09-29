@@ -1,0 +1,104 @@
+name: CI
+
+# Gate every change: build + tests + a Developer-ID-signed (unsigned-not-
+# notarized) artifact smoke check. Notarization is intentionally NOT run here —
+# it belongs in the release workflow so every PR does not consume an Apple
+# notarization submission.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: Build & test
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.9"
+
+      - name: Build (release)
+        run: swift build -c release --product Browsair
+
+      - name: Test
+        run: swift test
+
+  # Ad-hoc packaging: proves package-dmg.sh assembles a valid bundle + DMG with
+  # no signing identity present. ALLOW_ADHOC=1 makes the script tolerate the
+  # absence of a Developer ID identity (a non-shippable but structurally valid
+  # artifact). This does NOT need any secrets.
+  package-adhoc:
+    name: Package (ad-hoc, no identity)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.9"
+
+      - name: Package DMG (ad-hoc)
+        env:
+          ALLOW_ADHOC: "1"
+          SKIP_NOTARIZE: "1"
+        run: |
+          bash scripts/package-dmg.sh
+          echo "--- codesign -dvv ---"
+          codesign -dvv dist/Browsair.app 2>&1 || true
+          test -f dist/Browsair-*.dmg
+
+  # Full Developer-ID signing path, only when signing secrets exist. Skips
+  # cleanly otherwise so the check is never a false red on contributor PRs.
+  package-signed:
+    name: Package (Developer ID, no notarize)
+    runs-on: macos-14
+    if: ${{ secrets.BROWSAIR_CERT_P12_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.9"
+
+      - name: Restore signing certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.BROWSAIR_CERT_P12_BASE64 }}
+          CERT_P12_PASSWORD: ${{ secrets.BROWSAIR_CERT_P12_PASSWORD }}
+        run: |
+          echo "$CERT_P12_BASE64" | base64 --decode > signing.p12
+          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN"
+          security import signing.p12 -k "$CERT_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          rm -f signing.p12
+
+      - name: Package DMG (Developer ID)
+        env:
+          BROWSAIR_SIGN_IDENTITY: ${{ secrets.BROWSAIR_SIGN_IDENTITY }}
+          SKIP_NOTARIZE: "1"
+        run: |
+          bash scripts/package-dmg.sh
+          echo "--- codesign -dvv ---"
+          codesign -dvv dist/Browsair.app 2>&1
+          codesign --verify --deep --strict --verbose=2 dist/Browsair.app

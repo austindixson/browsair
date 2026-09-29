@@ -1,0 +1,91 @@
+name: Release
+
+# Trigger: push a version tag matching  v*  (e.g. v0.2.0, v1.3.1).
+# Builds the release, packages the DMG, signs it with Developer ID + hardened
+# runtime, notarizes via notarytool, staples the ticket, and attaches the
+# artifact to a GitHub Release.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (must match CFBundleShortVersionString in Info.plist)"
+        required: false
+        default: ""
+
+# One build host runs the whole sign+notarize pipeline in a single job so the
+# keychain, build cache, and dist/ artifact stay in the same workspace.
+jobs:
+  release:
+    name: Sign & notarize
+    runs-on: macos-14
+    permissions:
+      contents: write   # create the GitHub Release + upload assets
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.2.app
+
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.9"
+
+      - name: Restore Developer ID signing certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.BROWSAIR_CERT_P12_BASE64 }}
+          CERT_P12_PASSWORD: ${{ secrets.BROWSAIR_CERT_P12_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/signing.p12"
+          KEYCHAIN="$RUNNER_TEMP/release.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          # Allow codesign / productsign / notarytool to use the key without a
+          # GUI prompt (the partition list is the non-interactive enabler).
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/signing.p12" \
+            -k "$CERT_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" "$(security default-keychain -d user -l | tr -d '"')"
+          rm -f "$RUNNER_TEMP/signing.p12"
+          echo "--- available signing identities ---"
+          security find-identity -p codesigning -v
+
+      - name: Package, sign & notarize
+        env:
+          BROWSAIR_SIGN_IDENTITY: ${{ secrets.BROWSAIR_SIGN_IDENTITY }}
+          NOTARIZE: "1"
+          # API-key notarization (recommended for CI — no app-specific password).
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}            # contents of the .p8 file
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}      # Key ID from App Store Connect
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}      # Issuer ID from App Store Connect
+        run: |
+          set -euo pipefail
+          bash scripts/package-dmg.sh
+          DMG="$(ls dist/Browsair-*.dmg | head -1)"
+          echo "DMG=$DMG" | tee -a "$GITHUB_ENV"
+          # Final Gatekeeper check — a notarized + stapled DMG/app must be
+          # accepted. The app bundle is assessed after it is copied to a
+          # location spctl trusts (an installed path) is approximated here by
+          # stapled-ticket assessment; a hard fail here means the artifact is
+          # not shippable.
+          echo "--- codesign -dvv ---"
+          codesign -dvv dist/Browsair.app 2>&1
+          codesign --verify --deep --strict --verbose=2 dist/Browsair.app
+          # Hard gate: the DMG must carry a stapled notarization ticket, else
+          # the artifact is not shippable and the release must fail.
+          if ! xcrun stapler validate "$DMG"; then
+            echo "ERROR: notarization ticket not stapled — refusing to release." >&2
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.DMG }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
