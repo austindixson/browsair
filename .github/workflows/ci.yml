@@ -68,7 +68,7 @@ jobs:
   package-signed:
     name: Package (Developer ID, no notarize)
     runs-on: macos-14
-    if: ${{ secrets.BROWSAIR_CERT_P12_BASE64 != '' }}
+    if: ${{ has-secrets('BROWSAIR_CERT_P12_BASE64') }}
     steps:
       - uses: actions/checkout@v4
 
