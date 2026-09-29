@@ -31,6 +31,22 @@ struct BrowsairApp: App {
                 Button("AI Settings…") { NSApp.sendAction(#selector(AppDelegate.showAISettings), to: nil, from: nil) }
             }
 
+            CommandMenu("Tabs") {
+                ForEach(1...9, id: \.self) { n in
+                    Button("Tab \(n)") { session.selectTab(number: n) }
+                        .keyboardShortcut(KeyEquivalent(Character(String(n))), modifiers: .command)
+                }
+                Button("Last Tab") { session.selectLastTab() }
+                    .keyboardShortcut("9", modifiers: [.command, .option])
+                Divider()
+                Button("Next Tab") { session.selectNextTab() }
+                    .disabled(!session.canSwitchTabs)
+                    .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
+                Button("Previous Tab") { session.selectPreviousTab() }
+                    .disabled(!session.canSwitchTabs)
+                    .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
+            }
+
             CommandMenu("Navigation") {
                 Button("Reload") {
                     Task { await session.reload() }

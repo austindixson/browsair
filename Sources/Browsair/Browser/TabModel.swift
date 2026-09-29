@@ -20,4 +20,6 @@ final class TabModel: Identifiable, ObservableObject {
     @Published var errorMessage: String?
     @Published var isStartPage = true
     @Published var pageCommand: PageCommand?
+    /// Current in-page text selection, captured on navigation finish for AI context.
+    @Published var selectedText: String?
 }

@@ -97,6 +97,11 @@ struct BrowserChromeView: View {
                         Task { await session.submitAddressBar() }
                     }
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .browsairFocusAddressBar)) { _ in
+                    // ⌘L previously posted this notification with no observer, so it was a no-op.
+                    addressFocused = true
+                    NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .background(Color.primary.opacity(0.06))

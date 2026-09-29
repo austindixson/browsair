@@ -16,10 +16,8 @@ let package = Package(
             path: "Sources/Browsair",
             exclude: [
                 "Resources/Info.plist",
-                "Resources/Engine/.gitkeep",
-            ],
-            resources: [
-                .copy("Resources/Engine"),
+                "Resources/AppIcon.png",
+                "Resources/AppIcon.icns",
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"]),
