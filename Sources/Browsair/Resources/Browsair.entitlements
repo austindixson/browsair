@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Distribution entitlements for the Developer ID build (PR 3.1).
+
+  Decision: Browsair is NOT App Sandbox enabled. The app writes WebKit's
+  persistent website data (cookies, localStorage) under
+  ~/Library/Application Support/Browsair and registers the browsair://
+  callback scheme with LaunchServices; the App Sandbox would redirect those
+  writes into a per-app container and break the data-persistence and OAuth
+  callback behaviour the product depends on. This is an explicit decision,
+  not an oversight (improvement-plan-2026-09 R1).
+
+  The hardened runtime is still enabled (see package-dmg.sh). Because the app
+  is not sandboxed, the hardened runtime's network, file and process
+  restrictions are already unrestricted, so no temporary exceptions are
+  required here.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Not sandboxed: see decision note above. -->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+</dict>
+</plist>

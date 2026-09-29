@@ -18,6 +18,7 @@ let package = Package(
                 "Resources/Info.plist",
                 "Resources/AppIcon.png",
                 "Resources/AppIcon.icns",
+                "Resources/Browsair.entitlements",
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"]),
