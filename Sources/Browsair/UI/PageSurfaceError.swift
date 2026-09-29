@@ -34,19 +34,20 @@ enum PageSurfaceError {
 }
 
 /// Owns the on-disk location for WebKit's persistent website data (cookies, localStorage,
-/// IndexedDB). A stable, disk-backed store is required so login cookies survive relaunch.
-///
-/// Cookies for a non-ephemeral `WKWebsiteDataStore` are persisted by the system at
-/// `~/Library/HTTPStorages/<bundle-id>.binarycookies`; LocalStorage/IndexedDB live under
-/// `~/Library/WebKit/<bundle-id>/WebsiteData`. We surface a browsable, stable path for app-level
-/// housekeeping and "Clear browsing data".
+/// IndexedDB). The actual keys WebKit uses are derived from `WebsiteDataStoreLocation`, which
+/// resolves the bundle identifier the store is keyed on — see that type for why a bare binary
+/// has no persistent identity.
 enum WebsiteDataStoreSupport {
-    static func persistentStoreURL(fileManager: FileManager = .default) -> URL {
-        let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
-        let dir = base
-            .appendingPathComponent("Browsair", isDirectory: true)
-            .appendingPathComponent("WebsiteData", isDirectory: true)
+    /// The system location WebKit uses for this process's persistent website data.
+    ///
+    /// Returns `nil` when the process has no bundle identifier (a `swift run` binary), in which
+    /// case there is no persistent location to speak of and login cookies will not survive quit.
+    @MainActor
+    static func persistentStoreURL(fileManager: FileManager = .default) -> URL? {
+        guard let bundleID = WebsiteDataStoreLocation.resolvedBundleIdentifier(environment: ProcessInfo.processInfo.environment) else {
+            return nil
+        }
+        let dir = WebsiteDataStoreLocation.webKitWebsiteDataURL(bundleID: bundleID, fileManager: fileManager)
         try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

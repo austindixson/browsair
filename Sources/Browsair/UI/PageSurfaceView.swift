@@ -41,11 +41,12 @@ private struct WebPageView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        // Persistent store only for http(s) targets. `WKWebsiteDataStore.default()` has been
-        // observed to return an *ephemeral* store for an unsandboxed SwiftPM binary, which is the
-        // actual root cause of login sessions not surviving relaunch (audit F3). The app .app
-        // bundle with a stable bundle id gets a persistent store; the store is chosen here so it
-        // is explicit and testable rather than relying on an implicit default.
+        // Persistent store only for http(s) targets. `.default()` is the process-wide non-ephemeral
+        // store, but it is only genuinely persistent when the process has a bundle identifier for
+        // WebKit to key storage on. A `swift run` binary reports no identifier (audit F3), so its
+        // `.default()` data is not durably keyed and login cookies do not survive quit; running the
+        // app from a `.app` bundle with CFBundleIdentifier is what makes this persistent. See
+        // `WebsiteDataStoreLocation` and `launchWarningIfNotPersistent`.
         let needsPersistentData = (tab.urlString.hasPrefix("http") || tab.urlString.isEmpty)
         configuration.websiteDataStore = needsPersistentData ? .default() : .nonPersistent()
         configuration.preferences.isElementFullscreenEnabled = true

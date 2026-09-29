@@ -112,6 +112,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
+        launchWarningIfNotPersistent()
+    }
+
+    /// Warn when the process has no bundle identifier for WebKit to key persistent website data
+    /// on. A `swift run` binary is not an app bundle, so login cookies will not survive quit
+    /// (audit F3). Log + alert: the alert surfaces the issue to a developer running the app
+    /// directly, which is exactly when it would otherwise go unnoticed.
+    private func launchWarningIfNotPersistent() {
+        let bundleID = WebsiteDataStoreLocation.resolvedBundleIdentifier(
+            environment: ProcessInfo.processInfo.environment
+        )
+        guard !WebsiteDataStoreLocation.hasPersistentIdentity(bundleID) else { return }
+        let message = """
+        Browsair is running without a bundle identifier, so login cookies and website data will \
+        not be saved between launches. Run it from the built .app bundle \
+        (scripts/build-app-bundle.sh) for persistent sessions.
+        """
+        NSLog("Browsair persistence warning: \(message)")
+        let alert = NSAlert()
+        alert.messageText = "Website data will not persist"
+        alert.informativeText = message
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
