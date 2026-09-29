@@ -88,17 +88,18 @@ final class ContentBlockerRulesTests: XCTestCase {
         }
     }
 
-    /// DISABLED: the callback never fires under `swift test`. A probe confirmed
-    /// `WKContentRuleListStore` only completes when the caller has real bundle identity (a `.app`);
-    /// the SwiftPM xctest runner does not, so this test would pass vacuously via `waitForExpectations`
-    /// timing out on a green `expectation(description:)`. Rule compilation is verified out-of-band by
-    /// the probe in docs and by the persisted artifact under ~/Library/WebKit/dev.ghost64.browsair/.
+    /// Rule compilation cannot be asserted from the SwiftPM test runner, so it is not asserted
+    /// here. `WKContentRuleListStore` only invokes its completion handler when the caller has
+    /// real bundle identity (a `.app` bundle); the SwiftPM xctest runner has none, so the
+    /// callback never fires. A test using `expectation(description:)` + `waitForExpectations`
+    /// would therefore report success while running no assertion at all.
+    ///
+    /// Verified out-of-band instead: run the app (`swift run Browsair`), which compiles the
+    /// shipped JSON and persists it at
+    /// `~/Library/WebKit/dev.ghost64.browsair/ContentRuleLists/ContentRuleList-browsair.privacy`.
+    /// If the ruleset is ever changed, delete that file first — WebKit reuses a compiled list
+    /// by identifier and will not pick up edits otherwise.
     func DISABLED_testGeneratedRulesCompileInWebKit() throws {
         throw XCTSkip("WebKit rule-list callbacks do not fire in the SwiftPM test runner")
     }
-
-    /// Rule compilation cannot be asserted from the SwiftPM test runner (see the disabled
-    /// test above). It is verified out-of-band: the compiled ruleset is persisted at
-    /// `~/Library/WebKit/dev.ghost64.browsair/ContentRuleLists/ContentRuleList-browsair.privacy`,
-    /// and `scripts/verify-content-rules` compiles the shipped JSON in a real app context.
 }
