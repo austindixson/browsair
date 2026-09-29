@@ -27,6 +27,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Enforce tag matches Info.plist version
+        run: |
+          set -euo pipefail
+          PLIST="Sources/Browsair/Resources/Info.plist"
+          PLIST_VER="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PLIST")"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ github.event.inputs.version }}"
+            if [[ -z "$TAG" ]]; then
+              echo "workflow_dispatch with no version input; building Info.plist version v$PLIST_VER"
+            elif [[ "$TAG" != "$PLIST_VER" ]]; then
+              echo "ERROR: dispatched version '$TAG' != CFBundleShortVersionString '$PLIST_VER'." >&2
+              exit 1
+            fi
+          else
+            TAG="${GITHUB_REF_NAME#v}"   # strip leading 'v' from the tag (v0.3.0 -> 0.3.0)
+            if [[ "$TAG" != "$PLIST_VER" ]]; then
+              echo "ERROR: tag '$GITHUB_REF_NAME' (version $TAG) does not match" >&2
+              echo "CFBundleShortVersionString '$PLIST_VER' in $PLIST." >&2
+              echo "Bump Info.plist to match the tag, then re-tag." >&2
+              exit 1
+            fi
+          fi
+          echo "Version gate passed: $PLIST_VER"
+
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
